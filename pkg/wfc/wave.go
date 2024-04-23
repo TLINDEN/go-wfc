@@ -2,6 +2,7 @@ package wfc
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -37,6 +38,9 @@ type Wave struct {
 	// possible from a direction. This is useful if you'd like to slow down the
 	// collapse or add probabilities.
 	IsPossibleFn IsPossibleFunc
+
+	// Function used to calculate image constraints
+	ConstraintFn ConstraintFunc
 }
 
 // New creates a new wave collapse function with the given width and height and
@@ -60,10 +64,10 @@ func New(tiles []image.Image, width, height int) *Wave {
 // logic for specifying constraints.
 func NewWithCustomConstraints(tiles []image.Image, width, height int, fn ConstraintFunc) *Wave {
 	wave := &Wave{
-		Width:  width,
-		Height: height,
-		Input:  make([]*Module, len(tiles)),
-
+		Width:        width,
+		Height:       height,
+		Input:        make([]*Module, len(tiles)),
+		ConstraintFn: fn,
 		IsPossibleFn: DefaultIsPossibleFunc,
 	}
 
@@ -97,6 +101,97 @@ func (w *Wave) Initialize(seed int) {
 			w.PossibilitySpace[x+y*w.Width] = &slot
 		}
 	}
+}
+
+// Little helper to compute a "checksum"  of an image. We just compute
+// the color  hash for  each side  of the  image using  the constraint
+// function supplied either by the user  or the default one, compute a
+// hash of N color points on each side, concatenate them and return as
+// string.
+//
+// This can  be used  later to  compare images  (e.g. tiles  and input
+// images)
+func (w *Wave) ImageChecksum(img image.Image) string {
+	sums := make([]byte, 4*8)
+
+	for _, d := range Directions {
+		sum := w.ConstraintFn(img, d)
+		for _, b := range sum {
+			sums = append(sums, b)
+		}
+	}
+
+	return string(sums)
+}
+
+// InitializePrepopulated sets  up the wave collapse  function using a
+// pre-populated map image. Transparent tiles  will lead to slots with
+// the superposition  of all input tiles/modules,  but non-transparent
+// ones will lead to a readily constrained slot for that position.
+func (w *Wave) InitializePrepopulated(mapimage image.Image, seed int) error {
+	rand.Seed(int64(seed))
+
+	// needed to extract subimages from the map image
+	tilesize := mapimage.Bounds().Dx() / w.Width
+
+	// init
+	w.PossibilitySpace = make([]*Slot, w.Width*w.Height)
+
+	// pre-calculate input image checksums
+	checksums := make([]string, len(w.Input))
+	for i, module := range w.Input {
+		checksums[i] = w.ImageChecksum(module.Image)
+	}
+
+	// actually pre-populate the slots
+	for x := 0; x < w.Width; x++ {
+		for y := 0; y < w.Height; y++ {
+			tile, err := GetTileFromSpriteSheet(mapimage, x, y, tilesize, tilesize)
+			if err != nil {
+				return err
+			}
+
+			// default slot, has all modules
+			slot := Slot{
+				X: x, Y: y,
+				Superposition: make([]*Module, len(w.Input)),
+			}
+
+			if tileIsTransparent(tile) {
+				// behave as the standard Initialize()
+				fmt.Println("normal tile")
+				copy(slot.Superposition, w.Input)
+			} else {
+				fmt.Println("pre populated tile")
+				// found a pre-populated image in the tileset
+				// first, find input tile index matching current tile
+				index := -1
+				for i, _ := range w.Input {
+					checksum := w.ImageChecksum(tile)
+					if checksum == checksums[i] {
+						index = i
+						break
+					}
+				}
+
+				if index == -1 {
+					return fmt.Errorf("no matching image in the tileset for the current map tile at %d,%d", x, y)
+				}
+
+				// pre-populate
+				module := Module{Index: index, Image: tile}
+				for _, d := range Directions {
+					module.Adjacencies[d] = w.ConstraintFn(tile, d)
+				}
+
+				slot.Superposition = []*Module{&module}
+			}
+
+			w.PossibilitySpace[x+y*w.Width] = &slot
+		}
+	}
+
+	return nil
 }
 
 // Collapse recursively collapses the possibility space for each slot into a

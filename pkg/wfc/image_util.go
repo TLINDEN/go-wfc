@@ -103,3 +103,16 @@ func isImageFile(filename string) bool {
 		return false
 	}
 }
+
+// check if an image is completely transparent
+func tileIsTransparent(tile image.Image) bool {
+	for x := tile.Bounds().Min.X; x < tile.Bounds().Dx(); x++ {
+		for y := tile.Bounds().Min.Y; y < tile.Bounds().Dy(); y++ {
+			_, _, _, alpha := tile.At(x, y).RGBA()
+			if alpha != 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
