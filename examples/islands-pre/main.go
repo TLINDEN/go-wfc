@@ -37,7 +37,7 @@ func collapseWave(tileset_folder, output_image string) {
 	}
 
 	// Collapse the wave function (make up to 100 attempts)
-	err = wave.Collapse(200)
+	err = wave.Collapse(500)
 	if err != nil {
 		// don't panic here, we want to generate the image anyway
 		fmt.Printf("unable to generate: %v", err)

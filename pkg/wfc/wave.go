@@ -101,6 +101,8 @@ func (w *Wave) Initialize(seed int) {
 			w.PossibilitySpace[x+y*w.Width] = &slot
 		}
 	}
+
+	w.DumpPossibilitySpace()
 }
 
 // Little helper to compute a "checksum"  of an image. We just compute
@@ -159,10 +161,8 @@ func (w *Wave) InitializePrepopulated(mapimage image.Image, seed int) error {
 
 			if tileIsTransparent(tile) {
 				// behave as the standard Initialize()
-				fmt.Println("normal tile")
 				copy(slot.Superposition, w.Input)
 			} else {
-				fmt.Println("pre populated tile")
 				// found a pre-populated image in the tileset
 				// first, find input tile index matching current tile
 				index := -1
@@ -179,19 +179,31 @@ func (w *Wave) InitializePrepopulated(mapimage image.Image, seed int) error {
 				}
 
 				// pre-populate
-				module := Module{Index: index, Image: tile}
-				for _, d := range Directions {
-					module.Adjacencies[d] = w.ConstraintFn(tile, d)
-				}
-
-				slot.Superposition = []*Module{&module}
+				module := w.Input[index]
+				slot.Superposition = []*Module{module}
 			}
 
 			w.PossibilitySpace[x+y*w.Width] = &slot
 		}
 	}
 
+	w.DumpPossibilitySpace()
+
 	return nil
+}
+
+func (w *Wave) DumpPossibilitySpace() {
+	for index, slot := range w.PossibilitySpace {
+		fmt.Printf("slot %d, modules: %d:\n", index, len(slot.Superposition))
+		for _, module := range slot.Superposition {
+			constraints := "/"
+			for _, constraint := range module.Adjacencies {
+				constraints += fmt.Sprintf("%s", constraint)
+				constraints += "/"
+			}
+			fmt.Printf("                       %s\n", constraints)
+		}
+	}
 }
 
 // Collapse recursively collapses the possibility space for each slot into a

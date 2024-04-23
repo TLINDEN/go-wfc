@@ -91,7 +91,21 @@ func collapseWave(tileset_folder, output_image string) {
 	output_file := fmt.Sprintf(output_image, seed)
 
 	wfc.SaveImage(output_file, output)
+
+	wave.DumpPossibilitySpace()
 	fmt.Printf("Image saved to: %s\n", output_file)
+}
+
+func Eq(a, b wfc.ConstraintId) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func printAdjacencyHashValues(input_tileset string) {
